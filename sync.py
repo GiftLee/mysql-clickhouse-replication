@@ -169,15 +169,19 @@ class my_db():
                 for data in result:
                     if colum_lower_upper:
                         primary_key.append(data['COLUMN_NAME'].upper())
+                        #print('get_pri')
+                        #print(primary_key)
                     else:
                         primary_key.append(data['COLUMN_NAME'].lower())
+                        #print('get_pri')
+                        #print(primary_key)
             return primary_key
 
     def get_unique(self, db, table):
         unique_key = []
         uni_sql = "SELECT  COLUMN_NAME  FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='{0}' \
-                 AND TABLE_NAME='{1}' and CONSTRAINT_NAME in (SELECT CONSTRAINT_NAME from information_schema.TABLE_CONSTRAINTS \
-                 WHERE TABLE_SCHEMA='{2}' AND TABLE_NAME='{3}' and CONSTRAINT_TYPE='UNIQUE')".format(db, table, db, table)
+                AND TABLE_NAME='{1}' and CONSTRAINT_NAME in (SELECT CONSTRAINT_NAME from information_schema.TABLE_CONSTRAINTS \
+                WHERE TABLE_SCHEMA='{2}' AND TABLE_NAME='{3}' and CONSTRAINT_TYPE='UNIQUE')".format(db, table, db, table)
         try:
             cursor = self.conn.cursor()
             cursor.execute(uni_sql)
@@ -439,8 +443,10 @@ def binlog_reading(only_events, conf, debug):
             if pk:
                 name = "{0}.{1}".format(schema, table)
                 pk_dict[name] = pk
+
             else:
                 name = "{0}.{1}".format(schema, table)
+
                 if db.check_table_exists(schema, table):
                     logger.error("要同步的表: %s 不存在主键或者唯一键,程序退出...." % (name))
                     exit(1)
@@ -458,7 +464,7 @@ def binlog_reading(only_events, conf, debug):
     ch_info = "同步到clickhouse server {0}:{1}".format(cnf['clickhouse_server']['host'], cnf['clickhouse_server']['port'])
     repl_info = "{0}:{1}".format(cnf['master_server']['host'], cnf['master_server']['port'])
     alarm_info = "{0} 库:{1} 表:{2} 同步数据到clickhouse服务器:{3}失败".format(repl_info, only_schemas, only_tables,
-                                                                   socket.gethostname())
+                                                                socket.gethostname())
     logger.info('从服务器 %s 同步数据' % (repl_info))
     logger.info(message)
     logger.info(ch_info)
@@ -471,9 +477,7 @@ def binlog_reading(only_events, conf, debug):
                                 fail_on_table_metadata_unavailable=True, slave_heartbeat=10, freeze_schema=True)
 
     try:
-        print(stream)
         for binlogevent in stream:
-            print(binlogevent)
             for row in binlogevent.rows:
                 sequence += 1
                 new_event = False
@@ -507,8 +511,6 @@ def binlog_reading(only_events, conf, debug):
                     event['action_core'] = '1'
 
                 event_list.append(event)
-                print('event_list')
-                print(event_list)
                 if new_event:
                     event_list.append(new_event)
 
@@ -523,7 +525,7 @@ def binlog_reading(only_events, conf, debug):
                     log_pos = stream.log_pos
                     if repl_status:
                         redis.set_log_pos('master', repl_status['Master_Host'], repl_status['Master_Port'],
-                                          repl_status['Relay_Master_Log_File'], repl_status['Exec_Master_Log_Pos'])
+                                        repl_status['Relay_Master_Log_File'], repl_status['Exec_Master_Log_Pos'])
 
                     data_dict = {}
                     tmp_data = []
@@ -534,12 +536,12 @@ def binlog_reading(only_events, conf, debug):
                         action_core = items['action_core']
                         data_dict.setdefault(table + schema + action + action_core, []).append(items)
                     for k, v in data_dict.items():
-                        tmp_data.append(v)
-                    print(tmp_data)
+                        tmp_data.append(v) 
+                    #print(tmp_data)
                     status = data_to_ck(tmp_data, alarm_info, alarm_mail, debug, skip_dmls_all, skip_delete_tb_name,
                                         skip_update_tb_name, pk_dict, only_schemas, **clickhouse_conf)
-                    print('status')
-                    print(status)
+                    #print('status')
+                    #print(status)
                     if status:
                         redis.set_log_pos('slave', log_file, log_pos)
                         del event_list
@@ -589,9 +591,9 @@ def insert_update(tmp_data, pk_dict):
                     data['values'][key] = 0.0
 
             # decimal 字段类型处理，后期ch兼容mysql协议可以删除
-            if type(value) == decimal.Decimal:
-                if column_type[key].split("(")[0] == 'String' or column_type[key].split("(")[1] == 'String)':
-                    data['values'][key] = str(value)
+            # if type(value) == decimal.Decimal:
+            #     if column_type[key].split("(")[0] == 'String' or column_type[key].split("(")[1] == 'String)':
+            #         data['values'][key] = str(value)
 
             # if type(value) == datetime.datetime:
             #     data['values'][key] = str(value)
@@ -612,8 +614,10 @@ def insert_update(tmp_data, pk_dict):
     pattern = re.compile(r'\sdelete\s')
     query_sql = re.sub(pattern, ' ', query_sql)
     exec_sql['query_sql'] = query_sql
+    print(insert_data)
     del insert_data
     gc.collect()
+    print(exec_sql)
     return exec_sql
 
 
@@ -621,6 +625,8 @@ def insert_update(tmp_data, pk_dict):
 def action_reverse(event_table):
     del_ins = []
     data_dict = {}
+
+    print('--event_table--',event_table)
     for items in event_table:
         table = items.split('.')[1]
         schema = items.split('.')[0]
@@ -635,6 +641,7 @@ def action_reverse(event_table):
                 del_ins.append(v)
         else:
             del_ins.append(v)
+    print('--data_dict--',data_dict)
 
     del data_dict
     gc.collect()
@@ -672,7 +679,7 @@ def event_primary_key(schema, table, tmp_data, pk_dict):
     del_list = []
     last_del = {}
     db_table = "{0}.{1}".format(schema, table)
-    primary_key = pk_dict[db_table][0]
+    primary_key = pk_dict[db_table]
     for data in tmp_data:
         for k, v in data['values'].items():
             data_dict = {}
@@ -713,27 +720,29 @@ def event_primary_key(schema, table, tmp_data, pk_dict):
     else:
         message = "delete {0}.{1} 但是mysql里面没有定义主键...".format(schema, table)
         logger.warning(message)
-
+    tmp_sql = ' and '.join(['%s in %s' % (k, tuple(v)) for k, v in last_del.items()])
     for k, v in last_del.items():
         last_del[k] = tuple(v)
         nk = k + " in"
         last_del[nk] = last_del.pop(k)
         value_num = len(v)
-
-    replace_max = len(last_del) - 1
-    tmp_sql = ''
-    for k, v in last_del.items():
-        c = str(k) + ' ' + str(v) + " "
-        tmp_sql += c
-    tmp_sql = tmp_sql.replace(')', ') and', replace_max)
+    
+    # replace_max = len(last_del) - 1
+    # tmp_sql = ''
+    # for k, v in last_del.items():
+    #     c = str(k) + ' ' + str(v) + " "
+    #     tmp_sql += c
+    # tmp_sql = tmp_sql.replace(')', ') and', replace_max)
+    # print('tmp_sql',tmp_sql)
 
     if value_num == 1:
         del_sql = "alter table {0}.{1} delete where {2}".format(schema, table, tmp_sql)
         del_sql = del_sql.replace(',', '')
-        del_sql = del_sql.replace('L', '')
+        #print(del_sql)
+        #del_sql = del_sql.replace('L', '')
     else:
         del_sql = "alter table {0}.{1} delete where {2}".format(schema, table, tmp_sql)
-        del_sql = del_sql.replace('L', '')
+        #del_sql = del_sql.replace('L', '')
 
     del del_list
     del last_del
@@ -781,7 +790,7 @@ def data_to_ck(event, alarm_info, alarm_mail, debug, skip_dmls_all, skip_delete_
         last_data = json.dumps(mutation_data, indent=4, cls=DateEncoder)
         message = "mutations error faild num {0}. delete有失败.请进行检查. 详细信息: {1}".format(mutations_faild_num, last_data)
         logger.error(message)
-        send_mail(alarm_mail, alarm_info, message)
+        #send_mail(alarm_mail, alarm_info, message)
     print('event')
     print(event)
     # 字段大小写问题的处理
@@ -864,12 +873,15 @@ def data_to_ck(event, alarm_info, alarm_mail, debug, skip_dmls_all, skip_delete_
                 elif skip_dml_table_name in skip_delete_tb_name:
                     return True
                 else:
+                    #print("-----delete_sql-----")
+                    #print(del_sql)
                     client.execute(del_sql)
+
 
             except Exception as error:
                 message = "执行出错SQL:  " + del_sql
                 mail_contex = "{0} {1}".format(message, error)
-                send_mail(alarm_mail, alarm_info, mail_contex)
+                #send_mail(alarm_mail, alarm_info, mail_contex)
                 logger.error(message)
                 logger.error(error)
                 return False
@@ -882,10 +894,13 @@ def data_to_ck(event, alarm_info, alarm_mail, debug, skip_dmls_all, skip_delete_
             try:
                 if client.execute(sql['query_sql'])[0][0] >= 1:
                     client.execute(sql['del_sql'])
+                    message = "在插入数据之前删除数据,执行SQL:  " + sql['del_sql']
+                    logger.info(message)
+                    #print(sql['del_sql'])
             except Exception as error:
                 message = "在插入数据之前删除数据,执行出错SQL:  " + sql['del_sql']
                 mail_contex = "{0} {1}".format(message, error)
-                send_mail(alarm_mail, alarm_info, mail_contex)
+                #send_mail(alarm_mail, alarm_info, mail_contex)
                 logger.error(message)
                 logger.error(error)
                 return False
@@ -895,11 +910,15 @@ def data_to_ck(event, alarm_info, alarm_mail, debug, skip_dmls_all, skip_delete_
                 logger.info(message)
             try:
                 # client.execute("INSERT INTO test.t_user (id,username,password,gmt_create,gmt_modified) VALUES (24, 'R', 'li', '2020-05-28 17:59:59', '2020-05-28 17:59:59')", types_check=True)
-
+                #print("-----insert_sql------")
+                #print(sql['insert_sql'])
+                #print(sql['insert_data'])
+                message = "INSERT 数据插入SQL: %s %s " % (sql['insert_sql'], str(sql['insert_data']))
+                logger.info(message)
                 client.execute(sql['insert_sql'], sql['insert_data'], types_check=True)
 
             except Exception as error:
-                print(client.last_query)
+                #print(client.last_query)
                 message = "插入数据执行出错SQL:  " + sql['insert_sql'] + str(sql['insert_data'])
                 mail_contex = "{0} {1}".format(message, error)
                 # send_mail(alarm_mail, alarm_info, mail_contex)
@@ -949,10 +968,10 @@ if __name__ == '__main__':
     mail_send_from = cnf['failure_alarm']['mail_send_from']
 
     logger = logging.getLogger("mylogger")
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     fh = logging.FileHandler(cnf['repl_log']['log_dir'])
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(logging.INFO)
     fh.setFormatter(logging.Formatter(
         fmt="%(asctime)s %(filename)s:%(lineno)d %(levelname)s %(message)s",
         datefmt="%a %d %b %Y %H:%M:%S"
